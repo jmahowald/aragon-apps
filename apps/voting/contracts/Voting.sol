@@ -18,6 +18,7 @@ contract Voting is IForwarder, AragonApp {
     bytes32 public constant CREATE_VOTES_ROLE = keccak256("CREATE_VOTES_ROLE");
     bytes32 public constant MODIFY_SUPPORT_ROLE = keccak256("MODIFY_SUPPORT_ROLE");
     bytes32 public constant MODIFY_QUORUM_ROLE = keccak256("MODIFY_QUORUM_ROLE");
+    bytes32 public constant MODIFY_EARLY_EXECUTION_ROLE = keccak256("MODIFY_EARLY_EXECUTION_ROLE");
     bytes32 public constant MODIFY_OVERRULE_WINDOW_ROLE = keccak256("MODIFY_OVERRULE_WINDOW_ROLE");
 
     uint64 public constant PCT_BASE = 10 ** 18; // 0% = 0; 1% = 10^16; 100% = 10^18
@@ -34,6 +35,7 @@ contract Voting is IForwarder, AragonApp {
     string private constant ERROR_CAN_NOT_EXECUTE = "VOTING_CAN_NOT_EXECUTE";
     string private constant ERROR_CAN_NOT_FORWARD = "VOTING_CAN_NOT_FORWARD";
     string private constant ERROR_NO_VOTING_POWER = "VOTING_NO_VOTING_POWER";
+    string private constant ERROR_SAME_EARLY_EXECUTION = "VOTING_SAME_EARLY_EXECUTION";
     string private constant ERROR_INVALID_OVERRULE_WINDOW = "VOTING_INVALID_OVERRULE_WINDOW";
     string private constant ERROR_DELEGATES_EXCEEDS_MAX_LEN = "VOTING_DELEGATES_EXCEEDS_MAX_LEN";
     string private constant ERROR_INVALID_DELEGATES_INPUT_LEN = "VOTING_INVALID_DELEGATES_INPUT_LEN";
@@ -63,6 +65,7 @@ contract Voting is IForwarder, AragonApp {
     mapping (uint256 => Vote) internal votes;
     uint256 public votesLength;
 
+    bool public earlyExecutionDisallowed;
     uint64 public overruleWindow;
     mapping (address => address) internal representatives;
 
@@ -72,6 +75,7 @@ contract Voting is IForwarder, AragonApp {
     event ExecuteVote(uint256 indexed voteId);
     event ChangeSupportRequired(uint64 supportRequiredPct);
     event ChangeMinQuorum(uint64 minAcceptQuorumPct);
+    event ChangeEarlyExecution(bool allowed);
     event ChangeOverruleWindow(uint64 previousOverruleWindow, uint64 newOverruleWindow);
     event ChangeRepresentative(address indexed voter, address indexed previousRepresentative, address indexed newRepresentative);
 
@@ -126,6 +130,20 @@ contract Voting is IForwarder, AragonApp {
         minAcceptQuorumPct = _minAcceptQuorumPct;
 
         emit ChangeMinQuorum(_minAcceptQuorumPct);
+    }
+
+    /**
+    * @notice `_earlyExecutionAllowed? 'Allow' : 'Disallow'` votes early execution
+    * @param _earlyExecutionAllowed New votes early execution setting
+    */
+    function changeEarlyExecution(bool _earlyExecutionAllowed)
+        external
+        authP(MODIFY_EARLY_EXECUTION_ROLE, arr(uint256(_earlyExecutionAllowed ? 1 : 0), uint256(earlyExecutionDisallowed ? 0 : 1)))
+    {
+        bool _earlyExecutionDisallowed = !_earlyExecutionAllowed;
+        require(earlyExecutionDisallowed != _earlyExecutionDisallowed, ERROR_SAME_EARLY_EXECUTION);
+        earlyExecutionDisallowed = _earlyExecutionDisallowed;
+        emit ChangeEarlyExecution(_earlyExecutionAllowed);
     }
 
     /**
@@ -464,31 +482,33 @@ contract Voting is IForwarder, AragonApp {
     * @return True if the given vote can be executed, false otherwise
     */
     function _canExecute(Vote storage vote_) internal view returns (bool) {
+        // If vote is already executed, it cannot be executed again
         if (vote_.executed) {
             return false;
         }
 
-        // Voting is already decided
-        if (_isValuePct(vote_.yea, vote_.votingPower, vote_.supportRequiredPct)) {
+        // If the vote is already decided and early execution is allowed, it can be executed
+        if (!earlyExecutionDisallowed && _isValuePct(vote_.yea, vote_.votingPower, vote_.supportRequiredPct)) {
             return true;
         }
 
-        // Vote ended?
+        // If the vote is still open but early execution is not allowed, it cannot be executed
         if (_isVoteOpen(vote_)) {
             return false;
         }
 
-        // Has enough support?
+        // If the vote does not have enough support, it cannot be executed
         uint256 totalVotes = vote_.yea.add(vote_.nay);
         if (!_isValuePct(vote_.yea, totalVotes, vote_.supportRequiredPct)) {
             return false;
         }
 
-        // Has min quorum?
+        // If the vote has not reached min quorum, it cannot be executed
         if (!_isValuePct(vote_.yea, vote_.votingPower, vote_.minAcceptQuorumPct)) {
             return false;
         }
 
+        // If non of the above conditions are met, it can be executed
         return true;
     }
 
