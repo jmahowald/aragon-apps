@@ -30,7 +30,6 @@ contract('Voting App', ([root, holder1, holder2, holder20, holder29, holder51, n
     const NOW = 1553703809  // random fixed timestamp in seconds
     const ONE_DAY = 60 * 60 * 24
     const VOTING_DURATION = ONE_DAY * 5
-    const EARLY_EXECUTION_ALLOWED = true
 
     before(async () => {
         const kernelBase = await getContract('Kernel').new(true) // petrify immediately
