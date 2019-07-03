@@ -117,13 +117,13 @@ contract('Voting App', ([root, holder1, holder2, holder20, holder29, holder51, n
         })
 
         it('can change the early execution setting', async () => {
-            assert.isFalse(await voting.earlyExecutionDisallowed(), 'early execution should be allowed by default')
+            assert.isTrue(await voting.isEarlyExecutionAllowed(), 'early execution should be allowed by default')
 
             const receipt = await voting.changeEarlyExecution(false)
             assertAmountOfEvents(receipt, 'ChangeEarlyExecution')
             assertEvent(receipt, 'ChangeEarlyExecution', { allowed: false })
 
-            assert.isTrue(await voting.earlyExecutionDisallowed(), 'early execution should be disallowed')
+            assert.isFalse(await voting.isEarlyExecutionAllowed(), 'early execution should be disallowed')
         })
 
         it('fails trying to set the same early execution setting', async () => {
@@ -319,7 +319,7 @@ contract('Voting App', ([root, holder1, holder2, holder20, holder29, holder51, n
 
                 it('cannot early execute vote when early execution is disallow even when decided', async () => {
                     await voting.changeEarlyExecution(false)
-                    await voting.vote(voteId, true, true, { from: holder51 }) // causes execution
+                    await voting.vote(voteId, true, true, { from: holder51 })
 
                     const [isOpen, isExecuted] = await voting.getVote(voteId)
                     assert.isTrue(isOpen, 'vote should still be open')

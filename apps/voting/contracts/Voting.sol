@@ -65,7 +65,7 @@ contract Voting is IForwarder, AragonApp {
     mapping (uint256 => Vote) internal votes;
     uint256 public votesLength;
 
-    bool public earlyExecutionDisallowed;
+    bool private earlyExecutionDisallowed;
     uint64 public overruleWindow;
     mapping (address => address) internal representatives;
 
@@ -337,6 +337,14 @@ contract Voting is IForwarder, AragonApp {
     }
 
     /**
+    * @notice Tells whether the voting app allows early execution or not
+    * @return True if the voting app allows early execution, false otherwise
+    */
+    function isEarlyExecutionAllowed() public view isInitialized returns (bool) {
+        return !earlyExecutionDisallowed;
+    }
+
+    /**
     * @dev Return all information for a vote by its ID
     * @param _voteId Vote identifier
     * @return Vote open status
@@ -488,11 +496,11 @@ contract Voting is IForwarder, AragonApp {
         }
 
         // If the vote is already decided and early execution is allowed, it can be executed
-        if (!earlyExecutionDisallowed && _isValuePct(vote_.yea, vote_.votingPower, vote_.supportRequiredPct)) {
+        if (isEarlyExecutionAllowed() && _isValuePct(vote_.yea, vote_.votingPower, vote_.supportRequiredPct)) {
             return true;
         }
 
-        // If the vote is still open but early execution is not allowed, it cannot be executed
+        // If the vote is still open, it cannot be executed
         if (_isVoteOpen(vote_)) {
             return false;
         }
